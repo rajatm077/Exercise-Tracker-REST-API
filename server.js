@@ -44,8 +44,6 @@ app.post('/api/exercise/new-user', async (req, res) => {
 
 app.post('/api/exercise/add', async (req, res) => {
   try {
-    console.log(req.body);
-
     let userId = req.body.userId;    
     let isValid = mongoose.Types.ObjectId.isValid(userId);
     if (!isValid) res.send('unknown _id');
@@ -57,10 +55,11 @@ app.post('/api/exercise/add', async (req, res) => {
   
     let date = req.body.date;
     if (date == '') {
-      date = moment(new Date(), "YYYY-MM-DD");
+      date = moment(new Date());
+      console.log(date);      
     } else {
       let isValidDate = moment(date, "YYYY-MM-DD").isValid();
-      if (!isValidDate) date = moment(new Date(), "YYYY-MM-DD");
+      if (!isValidDate) date = moment(new Date());
     }
 
     let exercise = new Exercise({
@@ -71,14 +70,52 @@ app.post('/api/exercise/add', async (req, res) => {
     });
 
     exercise = await exercise.save();
-    res.send(exercise);
+    res.send({
+      "username": user.username,
+      "description": exercise.description,
+      "duration": exercise.duration,
+      "_id": userId,
+      "date": moment(exercise.date).format("ddd MMM DD YYYY") 
+    });
 
   } catch (err) {
     console.log(`Error at exercise/add api: ${err.message}`);
-  }
-  
+  }  
 });
 
+app.get('/api/exercise/log', async (req, res) => {
+  try {
+    let userId = req.query.userId;
+    if (!userId) { res.status(400).send('unknown userId'); return; }
+
+    let isValid = mongoose.Types.ObjectId.isValid(userId);
+    if (!isValid) { res.status(400).send('unknown userId'); return; }
+    let user = await User.findById(userId);
+    if (!user) { res.status(400).send('unknown userId'); return; }
+    
+    let opfrom = req.query.from || new Date(-8640000000000000);
+    let opto = req.query.to || new Date();
+    let oplimit = parseInt(req.query.limit) || 0;
+
+    let exercises = await Exercise.find({ 
+      userId: userId, 
+      date: { $gte: opfrom, $lte: opto }
+    }).limit(oplimit);
+
+    let log = {
+      "id": userId,
+      "username": user.username,
+      "from": (req.query.from) ? req.query.from: undefined,
+      "to": (req.query.to) ? req.query.to: undefined,
+      "log": exercises
+    };
+
+    res.json(log);
+  
+  } catch(err) {
+    console.log(`Error at get logs api: ${err.message}`);
+  }
+});
 
 
 // Not found middleware
