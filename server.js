@@ -1,9 +1,10 @@
 require('dotenv').config();
 
+const moment = require('moment');
 const express = require('express');
 const app = express();
 const User = require('./models/user').User;
-const Exercise = require('./models/exercise').Exercise;
+const { Exercise, validate } = require('./models/exercise');
 
 const cors = require('cors');
 
@@ -12,7 +13,7 @@ const mConnectionOpts = {
   useMongoClient: true
 };
 
-mongoose.connect(process.env.MLAB_URI, mConnectionOpts)
+mongoose.connect('mongodb://localhost/fcc_exercisetracker', mConnectionOpts)
   .then(() => console.log('Connected to mlab'))
   .catch((err) => console.log(`Failed to connect to mlab: ${err.message}`));
 
@@ -40,6 +41,45 @@ app.post('/api/exercise/new-user', async (req, res) => {
     console.log('Error in new user api: ', err.message);
   }    
 });
+
+app.post('/api/exercise/add', async (req, res) => {
+  try {
+    console.log(req.body);
+
+    let userId = req.body.userId;    
+    let isValid = mongoose.Types.ObjectId.isValid(userId);
+    if (!isValid) res.send('unknown _id');
+    let user = await User.findById(userId);
+    if (!user) res.send('unknown _id');
+    
+    const { error } = validate(req.body);
+    if (error) return res.status(400).send(error.details[0].message);
+  
+    let date = req.body.date;
+    if (date == '') {
+      date = moment(new Date(), "YYYY-MM-DD");
+    } else {
+      let isValidDate = moment(date, "YYYY-MM-DD").isValid();
+      if (!isValidDate) date = moment(new Date(), "YYYY-MM-DD");
+    }
+
+    let exercise = new Exercise({
+      userId, 
+      description: req.body.description,
+      duration: req.body.duration,
+      date
+    });
+
+    exercise = await exercise.save();
+    res.send(exercise);
+
+  } catch (err) {
+    console.log(`Error at exercise/add api: ${err.message}`);
+  }
+  
+});
+
+
 
 // Not found middleware
 app.use((req, res, next) => {
